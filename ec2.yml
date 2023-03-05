@@ -1,0 +1,96 @@
+- name: ec2
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+
+    - name: import keypair
+      amazon.aws.ec2_key:
+        name: ec2-user
+        key_material: "{{ lookup('file', '/home/nurulramadhona/.ssh/id_rsa.pub') }}"
+      tags:
+        - ec2_create
+        - ec2_keypair
+
+    - name: launch new instance + user data
+      amazon.aws.ec2_instance:
+        name: amazonlinux2a
+        region: ap-southeast-3
+        key_name: ec2-user
+        instance_type: t3.micro
+        security_group: ssh-web
+        vpc_subnet_id: subnet-0276d466994fa3087
+        network:
+          assign_public_ip: true
+          delete_on_termination: true
+        image_id: ami-0de34ee5744189c60 
+        user_data: "{{ lookup('file', 'user_data.sh') }}"
+        volumes: 
+          - device_name: /dev/xvda
+            ebs: 
+              volume_size: 8
+              volume_type: gp2
+              delete_on_termination: true
+      tags:
+        - ec2_create
+
+    - name: create launch template
+      community.aws.ec2_launch_template:
+        name: amazonlinux2_httpd_template
+        image_id: ami-0de34ee5744189c60
+        key_name: ec2-user
+        instance_type: t3.micro
+        region: ap-southeast-3
+        network_interfaces:
+          - associate_public_ip_address: true
+            delete_on_termination: true
+            device_index: 0
+        block_device_mappings:
+          - device_name: /dev/xvda
+            ebs:
+              delete_on_termination: true
+              volume_size: 8
+              volume_type: gp2
+        user_data: "{{ lookup('file', 'user_data.txt') }}"
+      tags:
+        - ec2_template
+
+    - name: launch new instance from template
+      amazon.aws.ec2_instance:
+        name: amazonlinux2b
+        launch_template: 
+          name: amazonlinux2_httpd_template
+        security_group: ssh-web
+        vpc_subnet_id: subnet-07bb6501337e4f87b
+      tags:
+        - ec2_template
+
+    - name: create custom ami from an instance
+      amazon.aws.ec2_ami:
+        instance_id: i-0187e4bb5d2f2007c
+        wait: no
+        name: amazonlinux2_httpd_ami
+      tags: 
+        - ec2_ami1
+
+    - name: launch new instance using custom ami
+      amazon.aws.ec2_instance:
+        name: amazonlinux2c
+        region: ap-southeast-3
+        key_name: ec2-user
+        instance_type: t3.micro
+        security_group: ssh-web
+        vpc_subnet_id: subnet-00b4e72d63a2125de
+        network:
+          assign_public_ip: true
+          delete_on_termination: true
+        image_id: ami-0c1cfb0a18f5e4451 
+        volumes: 
+          - device_name: /dev/xvda
+            ebs: 
+              volume_size: 8
+              volume_type: gp2
+              delete_on_termination: true
+        user_data: "{{ lookup('file', 'user_data2.sh') }}"
+      tags:
+        - ec2_ami2
